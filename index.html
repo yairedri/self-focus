@@ -417,11 +417,21 @@ function enableNotif(){
   try{const r=Notification.requestPermission(function(p){afterPerm(p);});if(r&&r.then)r.then(afterPerm);}catch(e){toast('לא ניתן לבקש אישור כאן — נסה לפתוח דרך שרת מקומי, או השתמש ב-.ics.');}
 }
 function afterPerm(p){notifStatusText();if(p==='granted'){toast('✅ התראות הופעלו');try{new Notification('התראות פעילות',{body:'תקבל תזכורת בזמן הנעול (כשהטאב פתוח).'});}catch(e){}}else if(p==='denied')toast('❌ ההתראות חסומות בהגדרות הדפדפן');else toast('לא אושר — נסה שוב');}
-function initNotif(){notifStatusText();if(!('Notification'in window))return;
-  setInterval(()=>{if(Notification.permission!=='granted')return;const now=new Date();const hm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');const t=todayISO();
-    S.habits.forEach(h=>{if(h.time===hm){const done=S.log[t]&&S.log[t][h.id]&&S.log[t][h.id].done;if(!done)try{new Notification('🔒 '+h.name,{body:'הגיע הזמן הנעול: '+h.time});}catch(e){}}});
-    (S.tasks[t]||[]).forEach(tk=>{if(tk.time===hm&&!tk.done)try{new Notification('📌 '+tk.text,{body:'משימה: '+tk.time});}catch(e){}});
-  },60000);}
+function curMin(){const n=new Date();return n.getHours()*60+n.getMinutes();}
+function hm2min(s){const[a,b]=(s||'').split(':').map(Number);return a*60+b;}
+function fireNotif(title,body){try{new Notification(title,{body:body});}catch(e){}}
+let _lastMin=null;
+function notifTick(){
+  if(!('Notification'in window)||Notification.permission!=='granted'){_lastMin=curMin();return;}
+  const nowMin=curMin(),t=todayISO();
+  if(_lastMin===null)_lastMin=nowMin-1;      // בטעינה: תופס רק מה שמתוזמן מעכשיו והלאה, לא זמנים שכבר עברו
+  if(nowMin<_lastMin)_lastMin=nowMin-1;       // מעבר יום
+  // כל פריט שהדקה שלו נפלה בטווח שבין הבדיקה הקודמת לעכשיו — מתריע, גם אם הדקה המדויקת הוחמצה
+  S.habits.forEach(h=>{const tm=hm2min(h.time);if(tm>_lastMin&&tm<=nowMin){const done=S.log[t]&&S.log[t][h.id]&&S.log[t][h.id].done;if(!done)fireNotif('🔒 '+h.name,'הגיע הזמן הנעול: '+h.time);}});
+  (S.tasks[t]||[]).forEach(tk=>{if(!tk.time)return;const tm=hm2min(tk.time);if(tm>_lastMin&&tm<=nowMin&&!tk.done)fireNotif('📌 '+tk.text,'משימה בשעה '+tk.time);});
+  _lastMin=nowMin;
+}
+function initNotif(){notifStatusText();if(!('Notification'in window))return;_lastMin=curMin()-1;setInterval(notifTick,20000);notifTick();}
 
 /* ============ BOOT ============ */
 buildNav();renderProfiles();
